@@ -10,6 +10,32 @@ interface SalzburgReportUIProps {
 }
 
 export function SalzburgReportUI({ report, performanceMetrics, onRestart }: SalzburgReportUIProps) {
+  // Calculate actual test duration based on performance metrics
+  const calculateTestDuration = () => {
+    if (performanceMetrics.length === 0) {
+      // Fallback: estimate based on report data
+      return ((report.averageResponseTime * report.completedTests + 3000 * report.totalImages) / 1000 / 60);
+    }
+    
+    // Find the earliest start time and latest end time
+    const startTimes = performanceMetrics.map(m => m.startTime);
+    const endTimes = performanceMetrics.map(m => {
+      if (m.wasSkipped) {
+        // For skipped tests, assume minimal time (just the start time)
+        return m.startTime + 1000; // 1 second for skip action
+      }
+      // For completed tests, add response time and processing time
+      return m.startTime + (m.responseTime || 0) + 2000; // 2 seconds processing buffer
+    });
+    
+    const testStartTime = Math.min(...startTimes);
+    const testEndTime = Math.max(...endTimes);
+    
+    return (testEndTime - testStartTime) / 1000 / 60; // Convert to minutes
+  };
+
+  const actualTestDuration = calculateTestDuration();
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-4">
       <Card className="w-full max-w-4xl shadow-2xl">
@@ -126,8 +152,8 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
 
             <MetricCard
               title="Test Duration"
-              value={`${((report.averageResponseTime * report.totalImages + 5000 * report.totalImages) / 1000 / 60).toFixed(1)}min`}
-              subtitle="Including processing time"
+              value={`${actualTestDuration.toFixed(1)}min`}
+              subtitle={`${performanceMetrics.length > 0 ? 'Actual' : 'Estimated'} time including all phases`}
               colorClass="text-teal-600"
             />
           </div>

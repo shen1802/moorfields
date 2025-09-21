@@ -1,4 +1,5 @@
-import { IDEAL_RESPONSE_TIME, MAX_ACCEPTABLE_TIME, VisualAcuityLevel } from './constants';
+import { IDEAL_RESPONSE_TIME, MAX_ACCEPTABLE_TIME, VisualAcuityLevel, STANDARD_IMAGES_PER_PHASE, TOTAL_EYE_PHASES } from './constants';
+import { PlaceHolderImages } from './placeholder-images';
 
 export interface PerformanceMetric {
   imageIndex: number;
@@ -7,15 +8,21 @@ export interface PerformanceMetric {
   responseTime?: number;
   isCorrect: boolean;
   transcribedText: string;
-  blurClearTime: number; // Time when image became clear (7 seconds)
-  eyeTestingPhase: string; // Which eye(s) were being tested
-  wasSkipped: boolean; // Whether this test was skipped
+  blurClearTime: number;
+  eyeTestingPhase: string;
+  wasSkipped: boolean;
+}
+
+export interface EyeResults {
+  correctResponses: number;
+  totalTests: number;
+  skipped: number;
 }
 
 export interface SalzburgReport {
   totalImages: number;
   correctResponses: number;
-  completedTests: number; // Actual number of completed tests (not skipped)
+  completedTests: number;
   averageResponseTime: number;
   visualAcuityScore: number;
   recognitionAccuracy: number;
@@ -26,143 +33,47 @@ export interface SalzburgReport {
   clinicalInterpretation: string;
   consistencyScore: number;
   standardDeviation: number;
-  shouldVisitOphthalmologist: boolean; // Flag for skipped tests
-  skippedTests: number; // Number of skipped tests
-  leftEyeResults?: { correctResponses: number; totalTests: number; skipped: number };
-  rightEyeResults?: { correctResponses: number; totalTests: number; skipped: number };
-  bothEyesResults?: { correctResponses: number; totalTests: number; skipped: number };
+  shouldVisitOphthalmologist: boolean;
+  skippedTests: number;
+  leftEyeResults?: EyeResults;
+  rightEyeResults?: EyeResults;
+  bothEyesResults?: EyeResults;
 }
+
+// Use actual number of images available
+const ACTUAL_IMAGES_COUNT = PlaceHolderImages.length;
 
 export function generateSalzburgReport(performanceMetrics: PerformanceMetric[]): SalzburgReport | null {
   if (performanceMetrics.length === 0) {
     return null;
   }
 
-  const correctResponses = performanceMetrics.filter(m => m.isCorrect && !m.wasSkipped).length;
-  const actualSkippedTests = performanceMetrics.filter(m => m.wasSkipped).length;
-  const completedTests = performanceMetrics.filter(m => !m.wasSkipped).length; // Actual completed tests
+  // Ensure we account for all possible tests across all phases
+  const completeMetrics = ensureAllPhasesAccountedFor(performanceMetrics);
   
-  // Calculate expected total tests: should always be total images × 3 phases
-  // regardless of how many phases were actually attempted/completed
-  const uniqueImages = new Set(performanceMetrics.map(m => m.imageName));
-  let imagesPerPhase = uniqueImages.size;
+  const { completedMetrics, skippedMetrics } = categorizeMetrics(completeMetrics);
+  const { leftEye, rightEye, bothEyes } = groupMetricsByPhase(completeMetrics);
   
-  // Fallback: if no metrics exist or very few, assume standard 13 images per phase
-  if (imagesPerPhase === 0 || (performanceMetrics.length > 0 && imagesPerPhase < 13)) {
-    imagesPerPhase = 13; // Standard number of images in PlaceHolderImages
-  }
+  const expectedTotalTests = ACTUAL_IMAGES_COUNT * TOTAL_EYE_PHASES;
+  const correctResponses = completedMetrics.filter(m => m.isCorrect).length;
+  const averageResponseTime = calculateAverageResponseTime(completedMetrics);
   
-  const expectedTotalTests = imagesPerPhase * 3; // Always 3 phases: left-eye, right-eye, both-eyes
-  const actualTotalTests = performanceMetrics.length;
-  
-  // Calculate the expected skipped tests: if total recorded tests < expected, the difference is skipped
-  const skippedTests = Math.max(actualSkippedTests, expectedTotalTests - completedTests);
-  
-  // Count phases that have any metrics (attempted or skipped)
-  const phasesAttempted = new Set(performanceMetrics.map(m => m.eyeTestingPhase));
-  
-  console.log('📊 Salzburg Report - Test counts:', {
-    expectedTotalTests,
-    actualTotalTests,
-    completedTests,
-    actualSkippedTests,
-    calculatedSkippedTests: skippedTests,
-    correctResponses,
-    imagesPerPhase,
-    phasesAttempted: Array.from(phasesAttempted),
-    uniqueImages: Array.from(uniqueImages)
-  });
-  
-  const avgResponseTime = performanceMetrics
-    .filter(m => !m.wasSkipped)
-    .reduce((sum, m) => sum + (m.responseTime || 0), 0) / Math.max(1, actualTotalTests - skippedTests);
-  
-  // Calculate per-eye results
-  const leftEyeMetrics = performanceMetrics.filter(m => m.eyeTestingPhase === 'left-eye');
-  const rightEyeMetrics = performanceMetrics.filter(m => m.eyeTestingPhase === 'right-eye');
-  const bothEyesMetrics = performanceMetrics.filter(m => m.eyeTestingPhase === 'both-eyes');
-
-  // Debug: Show breakdown by eye phase
-  console.log('📊 Salzburg Report - By phase breakdown:', {
-    leftEyeTotal: leftEyeMetrics.length,
-    leftEyeSkipped: leftEyeMetrics.filter(m => m.wasSkipped).length,
-    leftEyeCompleted: leftEyeMetrics.filter(m => !m.wasSkipped).length,
-    rightEyeTotal: rightEyeMetrics.length,
-    rightEyeSkipped: rightEyeMetrics.filter(m => m.wasSkipped).length,
-    rightEyeCompleted: rightEyeMetrics.filter(m => !m.wasSkipped).length,
-    bothEyesTotal: bothEyesMetrics.length,
-    bothEyesSkipped: bothEyesMetrics.filter(m => m.wasSkipped).length,
-    bothEyesCompleted: bothEyesMetrics.filter(m => !m.wasSkipped).length
-  });
-
-  console.log('📊 Salzburg Report - Eye metrics:', {
-    totalMetrics: performanceMetrics.length,
-    leftEyeCount: leftEyeMetrics.length,
-    rightEyeCount: rightEyeMetrics.length,
-    bothEyesCount: bothEyesMetrics.length,
-    allPhases: performanceMetrics.map(m => m.eyeTestingPhase)
-  });
-
-  // Calculate per-eye results with proper handling for skipped phases
-  const calculateEyeResults = (metrics: PerformanceMetric[]) => {
-    const completed = metrics.filter(m => !m.wasSkipped).length;
-    const skippedInMetrics = metrics.filter(m => m.wasSkipped).length;
-    const correctInMetrics = metrics.filter(m => m.isCorrect && !m.wasSkipped).length;
-    
-    // If no metrics exist for this phase, assume it was skipped entirely
-    if (metrics.length === 0) {
-      return {
-        correctResponses: 0,
-        totalTests: imagesPerPhase,
-        skipped: imagesPerPhase // All tests in this phase were skipped
-      };
-    }
-    
-    return {
-      correctResponses: correctInMetrics,
-      totalTests: imagesPerPhase, // Always show expected total (13)
-      skipped: skippedInMetrics
-    };
-  };
-
-  const leftEyeResults = calculateEyeResults(leftEyeMetrics);
-  const rightEyeResults = calculateEyeResults(rightEyeMetrics);
-  const bothEyesResults = calculateEyeResults(bothEyesMetrics);
-  
-  // Enhanced Salzburg reading test methodology calculations
-  const recognitionAccuracy = completedTests > 0 ? (correctResponses / completedTests) * 100 : 0;
-  
-  // Salzburg reading speed scoring (based on clinical norms)
-  let responseSpeedScore = 100;
-  
-  if (avgResponseTime > IDEAL_RESPONSE_TIME) {
-    const penalty = Math.min(((avgResponseTime - IDEAL_RESPONSE_TIME) / (MAX_ACCEPTABLE_TIME - IDEAL_RESPONSE_TIME)) * 50, 50);
-    responseSpeedScore = Math.max(50, 100 - penalty);
-  }
-  
-  // Visual processing efficiency (combination of accuracy and speed)
+  const recognitionAccuracy = completedMetrics.length > 0 ? (correctResponses / completedMetrics.length) * 100 : 0;
+  const responseSpeedScore = calculateResponseSpeedScore(averageResponseTime);
   const processingEfficiency = (recognitionAccuracy / 100) * (responseSpeedScore / 100) * 100;
-  
-  // Reading comprehension score (weighted for clinical assessment)
   const readingComprehensionScore = (recognitionAccuracy * 0.7) + (responseSpeedScore * 0.3);
   
-  // Visual acuity assessment (clinical interpretation)
   const { visualAcuityLevel, clinicalInterpretation } = getVisualAcuityAssessment(recognitionAccuracy, responseSpeedScore);
+  const { consistencyScore, standardDeviation } = calculateConsistencyMetrics(completedMetrics, averageResponseTime);
   
-  // Calculate consistency (standard deviation of response times)
-  const responseTimes = performanceMetrics.filter(m => !m.wasSkipped).map(m => m.responseTime || 0);
-  const stdDev = responseTimes.length > 0 ? 
-    Math.sqrt(responseTimes.reduce((sum, time) => sum + Math.pow(time - avgResponseTime, 2), 0) / responseTimes.length) : 0;
-  const consistencyScore = Math.max(0, 100 - (stdDev / 100)); // Lower std dev = higher consistency
-  
-  // Enhanced clinical recommendations based on Salzburg methodology
-  const recommendations = generateRecommendations(recognitionAccuracy, avgResponseTime, stdDev, skippedTests > 0);
-  
-  const report: SalzburgReport = {
-    totalImages: expectedTotalTests, // Use expected total, not actual recorded tests
+  const shouldVisitOphthalmologist = skippedMetrics.length > 0;
+  const recommendations = generateRecommendations(recognitionAccuracy, averageResponseTime, standardDeviation, shouldVisitOphthalmologist);
+
+  return {
+    totalImages: expectedTotalTests,
     correctResponses,
-    completedTests, // Actual completed tests
-    averageResponseTime: avgResponseTime,
+    completedTests: completedMetrics.length,
+    averageResponseTime,
     visualAcuityScore: processingEfficiency,
     recognitionAccuracy,
     responseSpeedScore,
@@ -171,15 +82,96 @@ export function generateSalzburgReport(performanceMetrics: PerformanceMetric[]):
     visualAcuityLevel,
     clinicalInterpretation,
     consistencyScore,
-    standardDeviation: stdDev,
-    shouldVisitOphthalmologist: skippedTests > 0,
-    skippedTests,
-    leftEyeResults,
-    rightEyeResults,
-    bothEyesResults
+    standardDeviation,
+    shouldVisitOphthalmologist,
+    skippedTests: skippedMetrics.length,
+    leftEyeResults: calculateEyeResults(leftEye),
+    rightEyeResults: calculateEyeResults(rightEye),
+    bothEyesResults: calculateEyeResults(bothEyes),
   };
+}
+
+function categorizeMetrics(metrics: PerformanceMetric[]) {
+  const completedMetrics = metrics.filter(m => !m.wasSkipped);
+  const skippedMetrics = metrics.filter(m => m.wasSkipped);
+  return { completedMetrics, skippedMetrics };
+}
+
+function ensureAllPhasesAccountedFor(metrics: PerformanceMetric[]): PerformanceMetric[] {
+  const phases = ['left-eye', 'right-eye', 'both-eyes'];
+  const result = [...metrics];
   
-  return report;
+  // For each phase, ensure we have exactly ACTUAL_IMAGES_COUNT metrics
+  phases.forEach(phase => {
+    const phaseMetrics = result.filter(m => m.eyeTestingPhase === phase);
+    const missingCount = ACTUAL_IMAGES_COUNT - phaseMetrics.length;
+    
+    if (missingCount > 0) {
+      // Add skipped metrics for missing tests in this phase
+      for (let i = phaseMetrics.length; i < ACTUAL_IMAGES_COUNT; i++) {
+        const skippedMetric: PerformanceMetric = {
+          imageIndex: i,
+          imageName: PlaceHolderImages[i].description,
+          startTime: Date.now(),
+          responseTime: 0,
+          isCorrect: false,
+          transcribedText: 'Phase not completed',
+          blurClearTime: 5000,
+          eyeTestingPhase: phase,
+          wasSkipped: true
+        };
+        result.push(skippedMetric);
+      }
+    }
+  });
+  
+  return result;
+}
+
+function groupMetricsByPhase(metrics: PerformanceMetric[]) {
+  return {
+    leftEye: metrics.filter(m => m.eyeTestingPhase === 'left-eye'),
+    rightEye: metrics.filter(m => m.eyeTestingPhase === 'right-eye'),
+    bothEyes: metrics.filter(m => m.eyeTestingPhase === 'both-eyes'),
+  };
+}
+
+function calculateAverageResponseTime(completedMetrics: PerformanceMetric[]): number {
+  if (completedMetrics.length === 0) return 0;
+  const totalTime = completedMetrics.reduce((sum, m) => sum + (m.responseTime || 0), 0);
+  return totalTime / completedMetrics.length;
+}
+
+function calculateResponseSpeedScore(avgResponseTime: number): number {
+  if (avgResponseTime <= IDEAL_RESPONSE_TIME) return 100;
+  
+  const penalty = Math.min(((avgResponseTime - IDEAL_RESPONSE_TIME) / (MAX_ACCEPTABLE_TIME - IDEAL_RESPONSE_TIME)) * 50, 50);
+  return Math.max(50, 100 - penalty);
+}
+
+function calculateEyeResults(phaseMetrics: PerformanceMetric[]): EyeResults {
+  const completed = phaseMetrics.filter(m => !m.wasSkipped);
+  const skipped = phaseMetrics.filter(m => m.wasSkipped);
+  const correct = completed.filter(m => m.isCorrect);
+  
+  return {
+    correctResponses: correct.length,
+    totalTests: ACTUAL_IMAGES_COUNT,
+    skipped: skipped.length + Math.max(0, ACTUAL_IMAGES_COUNT - phaseMetrics.length),
+  };
+}
+
+function calculateConsistencyMetrics(completedMetrics: PerformanceMetric[], avgResponseTime: number) {
+  if (completedMetrics.length === 0) {
+    return { consistencyScore: 0, standardDeviation: 0 };
+  }
+  
+  const responseTimes = completedMetrics.map(m => m.responseTime || 0);
+  const variance = responseTimes.reduce((sum, time) => sum + Math.pow(time - avgResponseTime, 2), 0) / responseTimes.length;
+  const standardDeviation = Math.sqrt(variance);
+  const consistencyScore = Math.max(0, 100 - (standardDeviation / 100));
+  
+  return { consistencyScore, standardDeviation };
 }
 
 function getVisualAcuityAssessment(recognitionAccuracy: number, responseSpeedScore: number) {
@@ -203,7 +195,7 @@ function getVisualAcuityAssessment(recognitionAccuracy: number, responseSpeedSco
   return { visualAcuityLevel, clinicalInterpretation };
 }
 
-function generateRecommendations(recognitionAccuracy: number, avgResponseTime: number, stdDev: number, hasSkippedTests: boolean = false): string[] {
+function generateRecommendations(recognitionAccuracy: number, avgResponseTime: number, stdDev: number, hasSkippedTests: boolean): string[] {
   const recommendations: string[] = [];
   
   if (hasSkippedTests) {
