@@ -174,6 +174,13 @@ export default function EchoScribeApp() {
         wasSkipped: false
       };
       
+      console.log('💾 Saving metric:', {
+        imageIndex: imageIndexAtRecording,
+        eyeTestingPhase: currentEyePhase,
+        isCorrect: validationSuccess,
+        wasSkipped: false
+      });
+      
       setPerformanceMetrics(prev => {
         const newMetrics = [...prev, metric];
         

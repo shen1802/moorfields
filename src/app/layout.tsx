@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'EchoValidate',
-  description: 'Real-time audio validation',
+  title: 'PANDA Animal Validation Test',
+  description: 'Animal recognition and visual acuity assessment test',
 };
 
 export default function RootLayout({

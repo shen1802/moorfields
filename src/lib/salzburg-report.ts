@@ -101,10 +101,19 @@ function ensureAllPhasesAccountedFor(metrics: PerformanceMetric[]): PerformanceM
   const phases = ['left-eye', 'right-eye', 'both-eyes'];
   const result = [...metrics];
   
+  console.log('📊 ensureAllPhasesAccountedFor - Input metrics:', metrics.length);
+  console.log('📊 Metrics by phase:', {
+    'left-eye': metrics.filter(m => m.eyeTestingPhase === 'left-eye').length,
+    'right-eye': metrics.filter(m => m.eyeTestingPhase === 'right-eye').length,
+    'both-eyes': metrics.filter(m => m.eyeTestingPhase === 'both-eyes').length,
+  });
+  
   // For each phase, ensure we have exactly ACTUAL_IMAGES_COUNT metrics
   phases.forEach(phase => {
     const phaseMetrics = result.filter(m => m.eyeTestingPhase === phase);
     const missingCount = ACTUAL_IMAGES_COUNT - phaseMetrics.length;
+    
+    console.log(`📊 Phase ${phase}: ${phaseMetrics.length} metrics, missing: ${missingCount}`);
     
     if (missingCount > 0) {
       // Add skipped metrics for missing tests in this phase

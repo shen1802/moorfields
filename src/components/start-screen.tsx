@@ -14,10 +14,10 @@ export function StartScreen({ onStart }: StartScreenProps) {
         <CardHeader>
           <div className="flex items-center justify-center gap-3">
             <EchoScribeLogo className="h-10 w-10 text-primary" />
-            <CardTitle className="text-3xl font-bold">EchoValidate</CardTitle>
+            <CardTitle className="text-3xl font-bold">PANDA Animal Validation Test</CardTitle>
           </div>
           <CardDescription className="pt-2 text-lg">
-            Visual Acuity Assessment - Three-Phase Eye Testing
+            Animal Recognition Assessment - Three-Phase Eye Testing
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

@@ -42,10 +42,10 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-3 mb-4">
             <EchoScribeLogo className="h-12 w-12 text-primary" />
-            <CardTitle className="text-3xl font-bold">Visual Acuity Assessment Report</CardTitle>
+            <CardTitle className="text-3xl font-bold">PANDA Animal Recognition Report</CardTitle>
           </div>
           <CardDescription className="text-lg">
-            Based on Salzburg Reading Test Methodology
+            Based on Animal Recognition Test Methodology
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -104,12 +104,12 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
 
           {/* Overall Score */}
           <div className="text-center p-6 bg-primary/10 rounded-lg">
-            <h3 className="text-2xl font-bold mb-2">Reading Comprehension Score</h3>
+            <h3 className="text-2xl font-bold mb-2">Animal Recognition Score</h3>
             <div className="text-4xl font-bold text-primary">
               {report.overallScore.toFixed(1)}/100
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              Based on Salzburg Reading Test Methodology
+              Based on Animal Recognition Test Methodology
             </p>
           </div>
           
@@ -174,7 +174,7 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
               </div>
               <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-md border-l-4 border-blue-400">
                 <p className="text-xs text-blue-800 dark:text-blue-200">
-                  <strong>Note:</strong> This assessment is based on the Salzburg Reading Test methodology and provides preliminary screening information. 
+                  <strong>Note:</strong> This assessment is based on the PANDA Animal Recognition Test methodology and provides preliminary screening information. 
                   For comprehensive evaluation, please consult with a qualified healthcare professional.
                 </p>
               </div>

@@ -82,9 +82,9 @@ export function MainTestScreen({
           <div className="flex items-center gap-3">
             <EchoScribeLogo className="h-8 w-8 text-primary" />
             <div>
-              <CardTitle className="text-2xl font-bold">EchoValidate</CardTitle>
+              <CardTitle className="text-2xl font-bold">PANDA Animal Validation Test</CardTitle>
               <CardDescription>
-                Validate your speech against the provided image
+                Name the animal you see in the image
               </CardDescription>
             </div>
           </div>
