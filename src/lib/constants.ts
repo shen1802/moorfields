@@ -24,6 +24,7 @@ export enum ValidationState {
 
 export enum AppScreen {
   START = 'start',
+  EYE_INSTRUCTION = 'eye-instruction',
   MAIN = 'main',
   REPORT = 'report'
 }
@@ -34,4 +35,10 @@ export enum VisualAcuityLevel {
   NORMAL = 'Normal',
   BORDERLINE = 'Borderline',
   BELOW_NORMAL = 'Below Normal'
+}
+
+export enum EyeTestingPhase {
+  LEFT_EYE = 'left-eye',
+  RIGHT_EYE = 'right-eye',
+  BOTH_EYES = 'both-eyes'
 }

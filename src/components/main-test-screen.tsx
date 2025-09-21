@@ -1,7 +1,8 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { Progress } from './ui/progress';
+import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import { CheckCircle, Loader2, Mic, XCircle } from 'lucide-react';
+import { CheckCircle, Loader2, Mic, XCircle, SkipForward } from 'lucide-react';
 import Image from 'next/image';
 import { EchoScribeLogo } from './icons';
 import { ImagePlaceholder } from '@/lib/placeholder-images';
@@ -14,6 +15,10 @@ interface MainTestScreenProps {
   transcribedText: string | null;
   progress: number;
   imageBlurAnimation: boolean;
+  currentEyePhase: string;
+  onSkipTest: () => void;
+  canSkip: boolean;
+  phaseProgress: string;
 }
 
 export function MainTestScreen({
@@ -22,9 +27,26 @@ export function MainTestScreen({
   validationState,
   transcribedText,
   progress,
-  imageBlurAnimation
+  imageBlurAnimation,
+  currentEyePhase,
+  onSkipTest,
+  canSkip,
+  phaseProgress
 }: MainTestScreenProps) {
   
+  const getEyeInstructions = () => {
+    switch (currentEyePhase) {
+      case 'Left Eye':
+        return 'Cover your right eye. Look with left eye only.';
+      case 'Right Eye':
+        return 'Cover your left eye. Look with right eye only.';
+      case 'Both Eyes':
+        return 'Use both eyes normally.';
+      default:
+        return '';
+    }
+  };
+
   const getStatusText = () => {
     switch (recordingState) {
       case RecordingState.IDLE:
@@ -52,14 +74,25 @@ export function MainTestScreen({
   return (
     <Card className="w-full max-w-3xl shadow-2xl">
       <CardHeader>
-        <div className="flex items-center gap-3">
-          <EchoScribeLogo className="h-8 w-8 text-primary" />
-          <div>
-            <CardTitle className="text-2xl font-bold">EchoValidate</CardTitle>
-            <CardDescription>
-              Validate your speech against the provided image
-            </CardDescription>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <EchoScribeLogo className="h-8 w-8 text-primary" />
+            <div>
+              <CardTitle className="text-2xl font-bold">EchoValidate</CardTitle>
+              <CardDescription>
+                Validate your speech against the provided image
+              </CardDescription>
+            </div>
           </div>
+          <div className="text-right">
+            <div className="text-lg font-semibold text-primary">{currentEyePhase} Test</div>
+            <div className="text-sm text-muted-foreground">Image {phaseProgress}</div>
+          </div>
+        </div>
+        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 rounded-md border-l-4 border-blue-500">
+          <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+            {getEyeInstructions()}
+          </p>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -99,11 +132,30 @@ export function MainTestScreen({
               <Mic className={cn("h-10 w-10 text-primary", recordingState === RecordingState.RECORDING && 'text-red-500 animate-pulse')}/>
             )}
           </div>
-          {recordingState === RecordingState.RECORDING && <Progress value={progress} className="w-full" />}
+          {(recordingState === RecordingState.RECORDING || progress > 0) && (
+            <div className="w-full">
+              <Progress value={progress} className="w-full h-2" />
+            </div>
+          )}
         </div>
-        <p className="text-sm text-muted-foreground h-5 text-center px-4">
-          {getStatusText()}
-        </p>
+        <div className="flex items-center gap-4 w-full">
+          <div className="flex-1">
+            <p className="text-sm text-muted-foreground h-5 text-center px-4">
+              {getStatusText()}
+            </p>
+          </div>
+          {canSkip && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSkipTest}
+              className="flex items-center gap-2 text-yellow-600 border-yellow-300 hover:bg-yellow-50 dark:text-yellow-400 dark:border-yellow-600 dark:hover:bg-yellow-950"
+            >
+              <SkipForward className="h-4 w-4" />
+              Skip Phase
+            </Button>
+          )}
+        </div>
       </CardFooter>
     </Card>
   );

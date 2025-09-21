@@ -23,6 +23,29 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Ophthalmologist Alert */}
+          {report.shouldVisitOphthalmologist && (
+            <div className="p-6 bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-lg">
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-red-700 dark:text-red-300 mb-3">
+                  ⚠️ Important Medical Recommendation
+                </h3>
+                <div className="text-lg font-semibold text-red-600 dark:text-red-400 mb-2">
+                  Please consult an ophthalmologist
+                </div>
+                <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+                  {report.skippedTests} out of {report.totalImages} total tests were skipped across all testing phases, which may indicate visual discomfort or difficulty. 
+                  A professional eye examination is recommended.
+                </p>
+                <div className="bg-red-100 dark:bg-red-900/40 p-3 rounded-md">
+                  <p className="text-xs text-red-800 dark:text-red-200">
+                    This recommendation is generated automatically when tests are skipped and should not replace professional medical advice.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Clinical Assessment Summary */}
           <div className="text-center p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border">
             <h3 className="text-2xl font-bold mb-2">Clinical Assessment</h3>
@@ -32,6 +55,25 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               {report.clinicalInterpretation}
             </p>
+          </div>
+
+          {/* Per-Eye Results */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <EyeResultCard
+              title="Left Eye"
+              results={report.leftEyeResults}
+              icon="👁️"
+            />
+            <EyeResultCard
+              title="Right Eye"
+              results={report.rightEyeResults}
+              icon="👁️"
+            />
+            <EyeResultCard
+              title="Both Eyes"
+              results={report.bothEyesResults}
+              icon="👀"
+            />
           </div>
 
           {/* Overall Score */}
@@ -50,7 +92,7 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
             <MetricCard
               title="Recognition Accuracy"
               value={`${report.recognitionAccuracy.toFixed(1)}%`}
-              subtitle={`${report.correctResponses}/${report.totalImages} images recognized correctly`}
+              subtitle={`${report.correctResponses}/${report.completedTests} completed tests correct`}
               colorClass="text-green-600"
             />
             
@@ -76,9 +118,9 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
             />
             
             <MetricCard
-              title="Images Tested"
+              title="Total Tests"
               value={`${report.totalImages}`}
-              subtitle="Single-presentation paradigm"
+              subtitle={`${report.completedTests} completed, ${report.skippedTests} skipped`}
               colorClass="text-orange-600"
             />
 
@@ -122,12 +164,23 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-base">{metric.imageName}</span>
-                      <span className={`text-lg ${metric.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                        {metric.isCorrect ? '✓' : '✗'}
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        metric.eyeTestingPhase === 'left-eye' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                        metric.eyeTestingPhase === 'right-eye' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                        'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                      }`}>
+                        {metric.eyeTestingPhase === 'left-eye' ? 'Left Eye' :
+                         metric.eyeTestingPhase === 'right-eye' ? 'Right Eye' : 'Both Eyes'}
+                      </span>
+                      <span className={`text-lg ${
+                        metric.wasSkipped ? 'text-yellow-600' :
+                        metric.isCorrect ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {metric.wasSkipped ? '⏭️' : metric.isCorrect ? '✓' : '✗'}
                       </span>
                     </div>
                     <span className="text-sm font-mono bg-background px-2 py-1 rounded">
-                      {(metric.responseTime!/1000).toFixed(1)}s
+                      {metric.wasSkipped ? 'Skipped' : `${(metric.responseTime!/1000).toFixed(1)}s`}
                     </span>
                   </div>
                   
@@ -139,6 +192,7 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground font-medium min-w-[70px]">You said:</span>
                       <span className={`font-medium ${
+                        metric.wasSkipped ? 'text-yellow-700 dark:text-yellow-300' :
                         metric.isCorrect 
                           ? 'text-green-700 dark:text-green-300' 
                           : 'text-red-700 dark:text-red-300'
@@ -179,6 +233,49 @@ function MetricCard({ title, value, subtitle, colorClass }: MetricCardProps) {
       <p className="text-sm text-muted-foreground">
         {subtitle}
       </p>
+    </div>
+  );
+}
+
+interface EyeResultCardProps {
+  title: string;
+  results?: { correctResponses: number; totalTests: number; skipped: number };
+  icon: string;
+}
+
+function EyeResultCard({ title, results, icon }: EyeResultCardProps) {
+  if (!results) return null;
+  
+  const completedTests = results.totalTests - results.skipped;
+  const accuracy = completedTests > 0 ? 
+    ((results.correctResponses / completedTests) * 100) : 0;
+  
+  // Check if all tests were skipped
+  const allSkipped = results.skipped === results.totalTests;
+  
+  return (
+    <div className="p-4 border rounded-lg">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-2xl">{icon}</span>
+        <h4 className="font-semibold text-lg">{title}</h4>
+      </div>
+      <div className="space-y-2">
+        <div className="text-xl font-bold text-primary">
+          {allSkipped ? 'All Skipped' : 
+           isNaN(accuracy) ? 'N/A' : `${accuracy.toFixed(1)}%`}
+        </div>
+        <div className="text-sm text-muted-foreground">
+          {allSkipped ? 
+            `0/${results.totalTests} completed` :
+            `${results.correctResponses}/${completedTests} correct`
+          }
+        </div>
+        {results.skipped > 0 && (
+          <div className="text-sm text-yellow-600 dark:text-yellow-400">
+            {results.skipped} of {results.totalTests} skipped
+          </div>
+        )}
+      </div>
     </div>
   );
 }

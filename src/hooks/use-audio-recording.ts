@@ -31,6 +31,13 @@ export function useAudioRecording() {
     onRecordingComplete: (audioBlob: Blob) => void,
     onError: (error: Error) => void
   ) => {
+    // Check if MediaRecorder is supported
+    if (!MediaRecorder.isTypeSupported('audio/webm')) {
+      console.error('MediaRecorder not supported');
+      onError(new Error('MediaRecorder not supported in this browser'));
+      return;
+    }
+    
     // Clean up any existing recording
     cleanup();
     isActiveRecordingRef.current = true;
@@ -40,6 +47,7 @@ export function useAudioRecording() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];

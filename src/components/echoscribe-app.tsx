@@ -5,12 +5,13 @@ import { useToast } from '@/hooks/use-toast';
 import { useAudioRecording } from '@/hooks/use-audio-recording';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { generateSalzburgReport, PerformanceMetric, SalzburgReport } from '@/lib/salzburg-report';
-import { RecordingState, ValidationState, AppScreen, SUCCESS_DELAY, FAILURE_DELAY } from '@/lib/constants';
+import { RecordingState, ValidationState, AppScreen, SUCCESS_DELAY, FAILURE_DELAY, EyeTestingPhase } from '@/lib/constants';
 import { blobToBase64 } from '@/lib/audio-utils';
 import { useEffect, useState } from 'react';
 
 // UI Components
 import { StartScreen } from './start-screen';
+import { EyeInstructionScreen } from './eye-instruction-screen';
 import { MainTestScreen } from './main-test-screen';
 import { SessionReport } from './session-report';
 import { SalzburgReportUI } from './salzburg-report-ui';
@@ -30,13 +31,17 @@ export default function EchoScribeApp() {
   const [transcribedText, setTranscribedText] = useState<string | null>(null);
   const [sessionResults, setSessionResults] = useState<ValidationResult[]>([]);
   
+  // Eye testing state
+  const [currentEyePhase, setCurrentEyePhase] = useState<EyeTestingPhase>(EyeTestingPhase.LEFT_EYE);
+  const [eyePhaseImageIndex, setEyePhaseImageIndex] = useState(0);
+  const [isSkipping, setIsSkipping] = useState(false);
+  
   // Image state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [imageBlurAnimation, setImageBlurAnimation] = useState(false);
   
   // Performance tracking state
-  const [shownImages, setShownImages] = useState<Set<number>>(new Set([0]));
   const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetric[]>([]);
   const [currentImageStartTime, setCurrentImageStartTime] = useState<number>(0);
   const [isTestComplete, setIsTestComplete] = useState(false);
@@ -45,6 +50,142 @@ export default function EchoScribeApp() {
   const { toast } = useToast();
   const { startRecording, cleanup } = useAudioRecording();
   const currentImage = PlaceHolderImages[currentImageIndex];
+
+  // Complete state reset for recording and UI
+  const resetRecordingState = () => {
+    cleanup();
+    setRecordingState(RecordingState.IDLE);
+    setProgress(0);
+    setValidationState(ValidationState.PENDING);
+    setTranscribedText(null);
+    setImageBlurAnimation(false);
+    setCurrentImageStartTime(0);
+    setIsSkipping(false);
+  };
+
+  // Clean recording state without full UI reset
+  const cleanRecordingOnly = () => {
+    cleanup();
+    setRecordingState(RecordingState.IDLE);
+    setProgress(0);
+  };
+
+  // Helper function to get eye phase display name
+  const getEyePhaseDisplayName = (phase: EyeTestingPhase): string => {
+    switch (phase) {
+      case EyeTestingPhase.LEFT_EYE:
+        return 'Left Eye';
+      case EyeTestingPhase.RIGHT_EYE:
+        return 'Right Eye';
+      case EyeTestingPhase.BOTH_EYES:
+        return 'Both Eyes';
+      default:
+        return 'Unknown';
+    }
+  };
+
+  // Skip current test
+  const skipCurrentTest = () => {
+    // Only allow skipping if not currently validating or already skipping
+    if (recordingState === RecordingState.VALIDATING || isSkipping) {
+      return;
+    }
+    
+    setIsSkipping(true);
+    
+    // Skip to next phase instead of next image
+    skipToNextPhase();
+  };
+
+  // Skip entire current phase
+  const skipToNextPhase = () => {
+    // Immediate and complete cleanup
+    resetRecordingState();
+    
+    const totalImagesPerPhase = PlaceHolderImages.length;
+    
+    // Create skipped metrics for all remaining images in current phase
+    const remainingImages = totalImagesPerPhase - eyePhaseImageIndex;
+    const skippedMetrics: PerformanceMetric[] = [];
+    
+    console.log('⏭️ Skipping phase:', {
+      currentEyePhase,
+      eyePhaseImageIndex,
+      totalImagesPerPhase,
+      remainingImages
+    });
+    
+    for (let i = eyePhaseImageIndex; i < totalImagesPerPhase; i++) {
+      const imageIndex = i;
+      const metric: PerformanceMetric = {
+        imageIndex,
+        imageName: PlaceHolderImages[imageIndex].description,
+        startTime: Date.now(),
+        responseTime: 0,
+        isCorrect: false,
+        transcribedText: 'Phase Skipped',
+        blurClearTime: 5000,
+        eyeTestingPhase: currentEyePhase,
+        wasSkipped: true
+      };
+      skippedMetrics.push(metric);
+    }
+    
+    console.log('📝 Generated skipped metrics:', skippedMetrics.length, 'for phase:', currentEyePhase);
+    
+    setPerformanceMetrics(prev => {
+      const newMetrics = [...prev, ...skippedMetrics];
+      return newMetrics;
+    });
+    
+    toast({
+      title: `${getEyePhaseDisplayName(currentEyePhase)} Phase Skipped`,
+      description: 'Moving to next testing phase...',
+      className: 'bg-yellow-100 dark:bg-yellow-900',
+    });
+    
+    // Move to next phase
+    setTimeout(() => {
+      moveToNextPhase();
+      setIsSkipping(false); // Reset skipping state
+    }, 1000);
+  };
+
+  // Move to next phase or complete test
+  const moveToNextPhase = () => {
+    let nextPhase: EyeTestingPhase | null = null;
+    
+    switch (currentEyePhase) {
+      case EyeTestingPhase.LEFT_EYE:
+        nextPhase = EyeTestingPhase.RIGHT_EYE;
+        break;
+      case EyeTestingPhase.RIGHT_EYE:
+        nextPhase = EyeTestingPhase.BOTH_EYES;
+        break;
+      case EyeTestingPhase.BOTH_EYES:
+        // All phases complete - show report
+        setTimeout(() => {
+          const report = generateSalzburgReport(performanceMetrics);
+          if (report) {
+            setSalzburgReport(report);
+            setIsTestComplete(true);
+            setAppScreen(AppScreen.REPORT);
+          }
+        }, 500);
+        return;
+    }
+    
+    if (nextPhase) {
+      // Complete state reset for next phase
+      resetRecordingState();
+      
+      // Show instruction screen for next phase
+      setCurrentEyePhase(nextPhase);
+      setAppScreen(AppScreen.EYE_INSTRUCTION);
+      setEyePhaseImageIndex(0);
+      setCurrentImageIndex(0);
+    }
+  };
 
   // Process recorded audio
   const processAudio = async (audioBlob: Blob, imageIndexAtRecording: number, recordingStartTime?: number) => {
@@ -114,14 +255,20 @@ export default function EchoScribeApp() {
         responseTime,
         isCorrect: validationSuccess,
         transcribedText: actualTranscribedText, // Use the actual transcribed text, not state
-        blurClearTime: 5000
+        blurClearTime: 5000,
+        eyeTestingPhase: currentEyePhase,
+        wasSkipped: false
       };
+      
+      console.log('💾 Saving metric with eyeTestingPhase:', currentEyePhase);
       
       setPerformanceMetrics(prev => {
         const newMetrics = [...prev, metric];
         
-        // Check if test is complete
-        if (newMetrics.length >= PlaceHolderImages.length) {
+        // Check if all phases are complete
+        const totalImagesPerPhase = PlaceHolderImages.length;
+        const totalExpectedMetrics = totalImagesPerPhase * 3; // 3 phases
+        if (newMetrics.length >= totalExpectedMetrics) {
           setTimeout(() => {
             const report = generateSalzburgReport(newMetrics);
             if (report) {
@@ -136,50 +283,54 @@ export default function EchoScribeApp() {
           return newMetrics;
         }
         
+        // Schedule advancement using the newMetrics (not the stale state)
+        setTimeout(() => {
+          advanceToNextImageWithMetrics(newMetrics);
+        }, validationSuccess ? SUCCESS_DELAY : FAILURE_DELAY);
+        
         return newMetrics;
       });
       
       setRecordingState(RecordingState.IDLE);
       setProgress(0);
-      
-      // Advance to next image if not complete
-      const currentMetricsCount = performanceMetrics.length + 1;
-      if (currentMetricsCount < PlaceHolderImages.length) {
-        setTimeout(() => {
-          advanceToNextImage();
-        }, validationSuccess ? SUCCESS_DELAY : FAILURE_DELAY);
-      }
     }
   };
 
-  // Advance to next image
-  const advanceToNextImage = () => {
-    setShownImages(currentShownImages => {
-      if (currentShownImages.size >= PlaceHolderImages.length) {
-        const report = generateSalzburgReport(performanceMetrics);
-        if (report) {
-          setSalzburgReport(report);
-          setIsTestComplete(true);
-        }
-        return currentShownImages;
-      }
-
-      let nextIndex = (currentImageIndex + 1) % PlaceHolderImages.length;
+  // Advance to next image using provided metrics (to avoid stale state issues)
+  const advanceToNextImageWithMetrics = (metrics: PerformanceMetric[]) => {
+    // Check how many images we've completed in the current phase
+    const currentPhaseMetrics = metrics.filter(m => m.eyeTestingPhase === currentEyePhase);
+    const nextEyePhaseImageIndex = currentPhaseMetrics.length;
+    const totalImagesPerPhase = PlaceHolderImages.length;
+    
+    console.log('🔄 advanceToNextImageWithMetrics called:', {
+      currentEyePhase,
+      currentPhaseMetrics: currentPhaseMetrics.length,
+      nextEyePhaseImageIndex,
+      totalImagesPerPhase,
+      currentImageIndex,
+      totalMetrics: metrics.length
+    });
+    
+    if (nextEyePhaseImageIndex >= totalImagesPerPhase) {
+      // Current phase is complete - move to next phase
+      console.log('✅ Phase complete, moving to next phase');
+      moveToNextPhase();
+    } else {
+      // Continue with next image in current phase
+      // For eye testing, we cycle through the same images for each phase
+      const nextImageIndex = nextEyePhaseImageIndex % totalImagesPerPhase;
       
-      while (currentShownImages.has(nextIndex)) {
-        nextIndex = (nextIndex + 1) % PlaceHolderImages.length;
-        if (nextIndex === currentImageIndex) {
-          const report = generateSalzburgReport(performanceMetrics);
-          if (report) {
-            setSalzburgReport(report);
-            setIsTestComplete(true);
-          }
-          return currentShownImages;
-        }
-      }
+      console.log('➡️ Moving to next image in same phase:', {
+        nextEyePhaseImageIndex,
+        nextImageIndex
+      });
       
-      // Update all states synchronously for the next image
-      setCurrentImageIndex(nextIndex);
+      // Clean recording state only
+      cleanRecordingOnly();
+      
+      setEyePhaseImageIndex(nextEyePhaseImageIndex);
+      setCurrentImageIndex(nextImageIndex);
       setValidationState(ValidationState.PENDING);
       setTranscribedText(null);
       setImageBlurAnimation(true);
@@ -187,28 +338,30 @@ export default function EchoScribeApp() {
       
       // Start recording for the next image after state updates
       setTimeout(() => {
-        startRecordingForImage(nextIndex);
-      }, 200); // Longer delay to ensure all state updates are processed
-      
-      return new Set([...currentShownImages, nextIndex]);
-    });
+        startRecordingForImage(nextImageIndex);
+      }, 200);
+    }
+  };
+
+  // Advance to next image
+  const advanceToNextImage = () => {
+    // Use current performanceMetrics state
+    advanceToNextImageWithMetrics(performanceMetrics);
   };
 
   // Reset app state
   const resetApp = () => {
+    resetRecordingState();
     setCurrentImageIndex(0);
     setSessionResults([]);
-    setTranscribedText(null);
-    setValidationState(ValidationState.PENDING);
     setAppScreen(AppScreen.START);
     setHasStarted(false);
-    setProgress(0);
-    setImageBlurAnimation(false);
-    setShownImages(new Set([0]));
     setPerformanceMetrics([]);
-    setCurrentImageStartTime(0);
     setIsTestComplete(false);
     setSalzburgReport(null);
+    setCurrentEyePhase(EyeTestingPhase.LEFT_EYE);
+    setEyePhaseImageIndex(0);
+    setIsSkipping(false);
   };
 
   // Start recording for specific image
@@ -227,8 +380,12 @@ export default function EchoScribeApp() {
       setRecordingState(RecordingState.RECORDING);
       
       startRecording(
-        (progress) => setProgress(progress),
-        (audioBlob) => processAudio(audioBlob, imageIndex, recordingStartTime), // Pass start time
+        (progress) => {
+          setProgress(progress);
+        },
+        (audioBlob) => {
+          processAudio(audioBlob, imageIndex, recordingStartTime);
+        },
         (error) => {
           console.error('Recording error:', error);
           toast({
@@ -246,11 +403,21 @@ export default function EchoScribeApp() {
   // Start app
   const handleStart = () => {
     setHasStarted(true);
+    setAppScreen(AppScreen.EYE_INSTRUCTION);
+  };
+
+  // Start eye testing phase
+  const startEyePhase = () => {
+    // Ensure clean state before starting
+    resetRecordingState();
+    
+    setAppScreen(AppScreen.MAIN);
     setImageBlurAnimation(true);
     setCurrentImageStartTime(Date.now());
+    
     setTimeout(() => {
       startRecordingForImage(0);
-    }, 100);
+    }, 1000);
   };
 
   // Cleanup on unmount
@@ -275,6 +442,16 @@ export default function EchoScribeApp() {
     return <StartScreen onStart={handleStart} />;
   }
 
+  if (appScreen === AppScreen.EYE_INSTRUCTION) {
+    return (
+      <EyeInstructionScreen
+        eyePhase={currentEyePhase}
+        onStart={startEyePhase}
+        onSkipPhase={skipToNextPhase}
+      />
+    );
+  }
+
   if (appScreen === AppScreen.REPORT) {
     return (
       <SessionReport
@@ -293,6 +470,10 @@ export default function EchoScribeApp() {
         transcribedText={transcribedText}
         progress={progress}
         imageBlurAnimation={imageBlurAnimation}
+        currentEyePhase={getEyePhaseDisplayName(currentEyePhase)}
+        onSkipTest={skipCurrentTest}
+        canSkip={recordingState !== RecordingState.VALIDATING && !isSkipping}
+        phaseProgress={`${eyePhaseImageIndex + 1}/${PlaceHolderImages.length}`}
       />
     </div>
   );
