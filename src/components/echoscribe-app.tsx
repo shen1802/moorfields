@@ -47,10 +47,14 @@ export default function EchoScribeApp() {
   const currentImage = PlaceHolderImages[currentImageIndex];
 
   // Process recorded audio
-  const processAudio = async (audioBlob: Blob, imageIndexAtRecording: number) => {
+  const processAudio = async (audioBlob: Blob, imageIndexAtRecording: number, recordingStartTime?: number) => {
     setRecordingState(RecordingState.VALIDATING);
     setTranscribedText(null);
     let validationSuccess = false;
+    let actualTranscribedText = '';
+    
+    // Use passed start time or fallback to state
+    const actualStartTime = recordingStartTime || currentImageStartTime;
     
     try {
       const base64Audio = await blobToBase64(audioBlob);
@@ -64,6 +68,8 @@ export default function EchoScribeApp() {
         textToMatch: goldenStandard,
       });
 
+      // Store the transcribed text for later use
+      actualTranscribedText = result.transcribedText;
       setTranscribedText(result.transcribedText);
 
       // Add result to session results
@@ -98,16 +104,16 @@ export default function EchoScribeApp() {
         description: `Could not validate the audio: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     } finally {
-      // Record performance metric
+      // Record performance metric using the actual transcribed text and correct start time
       const processingImage = PlaceHolderImages[imageIndexAtRecording];
-      const responseTime = Date.now() - currentImageStartTime;
+      const responseTime = Date.now() - actualStartTime;
       const metric: PerformanceMetric = {
         imageIndex: imageIndexAtRecording,
         imageName: processingImage.description,
-        startTime: currentImageStartTime,
+        startTime: actualStartTime,
         responseTime,
         isCorrect: validationSuccess,
-        transcribedText: transcribedText || '',
+        transcribedText: actualTranscribedText, // Use the actual transcribed text, not state
         blurClearTime: 5000
       };
       
@@ -211,6 +217,10 @@ export default function EchoScribeApp() {
     cleanup();
     setProgress(0);
     setRecordingState(RecordingState.IDLE);
+    
+    // Record the actual start time when recording begins
+    const recordingStartTime = Date.now();
+    setCurrentImageStartTime(recordingStartTime);
 
     // Start recording after ensuring cleanup and reset
     setTimeout(() => {
@@ -218,7 +228,7 @@ export default function EchoScribeApp() {
       
       startRecording(
         (progress) => setProgress(progress),
-        (audioBlob) => processAudio(audioBlob, imageIndex),
+        (audioBlob) => processAudio(audioBlob, imageIndex, recordingStartTime), // Pass start time
         (error) => {
           console.error('Recording error:', error);
           toast({

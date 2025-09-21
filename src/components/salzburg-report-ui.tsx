@@ -116,18 +116,36 @@ export function SalzburgReportUI({ report, performanceMetrics, onRestart }: Salz
           {/* Performance Details */}
           <div className="p-4 border rounded-lg">
             <h4 className="font-semibold text-lg mb-3">Detailed Results</h4>
-            <div className="max-h-40 overflow-y-auto space-y-2">
+            <div className="max-h-60 overflow-y-auto space-y-3">
               {performanceMetrics.map((metric, index) => (
-                <div key={index} className="flex justify-between items-center text-sm p-2 bg-secondary/30 rounded">
-                  <span className="font-medium">{metric.imageName}</span>
-                  <div className="flex gap-4">
-                    <span className={metric.isCorrect ? 'text-green-600' : 'text-red-600'}>
-                      {metric.isCorrect ? '✓' : '✗'}
+                <div key={index} className="p-3 bg-secondary/30 rounded-lg">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-base">{metric.imageName}</span>
+                      <span className={`text-lg ${metric.isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                        {metric.isCorrect ? '✓' : '✗'}
+                      </span>
+                    </div>
+                    <span className="text-sm font-mono bg-background px-2 py-1 rounded">
+                      {(metric.responseTime!/1000).toFixed(1)}s
                     </span>
-                    <span>{(metric.responseTime!/1000).toFixed(1)}s</span>
-                    <span className="text-muted-foreground text-xs">
-                      "{metric.transcribedText}"
-                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground font-medium min-w-[70px]">Expected:</span>
+                      <span className="font-medium text-blue-700 dark:text-blue-300">"{metric.imageName}"</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground font-medium min-w-[70px]">You said:</span>
+                      <span className={`font-medium ${
+                        metric.isCorrect 
+                          ? 'text-green-700 dark:text-green-300' 
+                          : 'text-red-700 dark:text-red-300'
+                      }`}>
+                        "{metric.transcribedText}"
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}
